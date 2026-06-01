@@ -1,6 +1,8 @@
+import os
+import joblib
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-import mlflow.sklearn
+import mlflow
 import pandas as pd
 
 app = FastAPI(
@@ -8,9 +10,28 @@ app = FastAPI(
     description="Coronary Artery Disease risk prediction from clinical features."
 )
 
+# Load model by resolving run_id from the registry, then reading the artifact
+# from the locally mounted mlruns/ directory using a relative path.
+# This avoids the absolute Windows path stored in mlflow.db, which breaks
+# inside the Linux container even when mlruns/ is mounted as a volume.
+def _load_model():
+    client = mlflow.tracking.MlflowClient()
+    mv = client.get_model_version("cad-risk-predictor", "1")
+    # mv.source is the absolute artifact URI recorded at training time on Windows.
+    # It uses backslashes (e.g. "file:C:\Users\...\mlruns\0\models\m-...\artifacts"),
+    # so we normalize to forward slashes before extracting the relative portion.
+    # os.path.abspath then resolves to /app/mlruns/... inside the container (WORKDIR=/app).
+    # In MLflow 3.x, mv.source = "models:/m-{uuid}" — not a file path.
+    # Parse the model_id from the URI, then construct the local artifact path.
+    # os.path.abspath resolves to /app/mlruns/... in the container (WORKDIR=/app).
+    model_id = mv.source.split("/")[-1]
+    experiment_id = mlflow.get_run(mv.run_id).info.experiment_id
+    pkl_path = os.path.abspath(f"mlruns/{experiment_id}/models/{model_id}/artifacts/model.pkl")
+    return joblib.load(pkl_path)
+
 # Model loaded once at startup and reused for every request.
 # Loading inside predict() would reload from disk on every call — slow.
-model = mlflow.sklearn.load_model("models:/cad-risk-predictor/1")
+model = _load_model()
 
 
 class PatientFeatures(BaseModel):

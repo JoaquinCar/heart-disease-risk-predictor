@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount mlruns/ so the container can access model artifact files
+      - ./mlruns:/app/mlruns
+      # Mount mlflow.db so the container can read the Model Registry
+      # Registry (model names, versions) lives in mlflow.db, artifacts in mlruns/
+      - ./mlflow.db:/app/mlflow.db
+    environment:
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow.db

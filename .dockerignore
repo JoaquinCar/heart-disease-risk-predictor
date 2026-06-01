@@ -1,0 +1,10 @@
+venv/
+notebooks/
+data/
+mlruns/
+mlflow.db
+__pycache__/
+*.pyc
+*.ipynb_checkpoints
+.git/
+.claude/
