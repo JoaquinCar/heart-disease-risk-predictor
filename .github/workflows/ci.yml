@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train model
+        # Trains the Random Forest pipeline and registers it in the local MLflow registry.
+        # This proves the full pipeline works end-to-end: data → training → registry.
+        # mlflow.db and mlruns/ are created here and reused by the API during tests.
+        run: python src/train.py
+
+      - name: Run tests
+        # API loads the model trained in the previous step via the local MLflow registry.
+        env:
+          MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+        run: pytest tests/ -v
+
+  docker:
+    needs: test  # only build image if tests pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        # Verifies the Dockerfile is valid and all dependencies install correctly.
+        # Does not push to a registry — build success is enough for portfolio CI.
+        run: docker build -t cad-risk-predictor .
